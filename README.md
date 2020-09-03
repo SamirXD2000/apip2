@@ -1,29 +1,20 @@
 # README #
 
-This README would normally document whatever steps are necessary to get your application up and running.
-
 ### What is this repository for? ###
 
-* Quick summary
-* Version
-* [Learn Markdown](https://bitbucket.org/tutorials/markdowndemo)
+* API ARCES
 
 ### How do I get set up? ###
 
-* Summary of set up
-* Configuration
-* Dependencies
-* Database configuration
-* How to run tests
-* Deployment instructions
+* Run docker-compose up --build -d
 
-### Contribution guidelines ###
 
-* Writing tests
-* Code review
-* Other guidelines
+### Structure  ###
+* Docker Container With:
+	* Php 7.3 fpm
+	* Nginx
+	* Lumen
 
-### Who do I talk to? ###
+### Developed by ###
 
-* Repo owner or admin
-* Other community or team contact
+* Arces.mx Dev team
