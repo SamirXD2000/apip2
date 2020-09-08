@@ -1,5 +1,4 @@
 <?php
-
 /*
 |--------------------------------------------------------------------------
 | Application Routes
@@ -12,5 +11,32 @@
 */
 
 $router->get('/', function () use ($router) {
-    return $router->app->version();
+    //return $router->app->version();
+});
+
+//FOR PUBLIC
+$router->group(['prefix' => '1.0'], function () use ($router) {
+
+	$router->post('prelogin',  'loginController@prelogin'); //Check mail if exists
+
+	$router->post('login',  'loginController@login'); //Login
+
+	$router->post('registeruser',  'loginController@registerUser'); //User registraion
+
+	$router->post('confirmemail',  'loginController@confirmEmail'); //User registraion
+
+	$router->get('foodimages',  'loginController@foodImages'); //User registraion
+
+	$router->get('projects',  'loginController@projects'); //Project List
+  
+});
+
+//FOR PRIVATE
+$router->group( ['middleware' => 'auth'], function () use ($router) {
+    
+    $router->post('1.0/user/profile', 'loginController@profile');
+	
+	$router->get('user', function () use ($router) {
+        return auth()->user();
+    });
 });
