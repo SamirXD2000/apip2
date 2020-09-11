@@ -28,6 +28,7 @@ $app->withFacades();
 $app->withEloquent();
 
 $app->register(Illuminate\Mail\MailServiceProvider::class);
+$app->register(Jenssegers\Agent\AgentServiceProvider::class);
 
 /*
 |--------------------------------------------------------------------------
@@ -67,6 +68,7 @@ $app->configure('mail');
 $app->alias('mailer', Illuminate\Mail\Mailer::class);
 $app->alias('mailer', Illuminate\Contracts\Mail\Mailer::class);
 $app->alias('mailer', Illuminate\Contracts\Mail\MailQueue::class);
+$app->alias('Agent', Jenssegers\Agent\Facades\Agent::class);
 
 /*
 |--------------------------------------------------------------------------

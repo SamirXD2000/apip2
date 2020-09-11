@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class Users extends Model
+class UserSessions extends Model
 {
 
     /**
@@ -12,14 +12,13 @@ class Users extends Model
      *
      * @var array
      */
+
+    public $timestamps = false;
+
     protected $fillable = [
-        'id', 'name', 'lastname', 'lastname2', 'email', 'phone', 'food_image','api_token','email_confirmation','email_confirmed','phone_code_for_confirm', 'phone_confirmed','nip','nip_confirmed'
+        'user_id', 'started_at', 'expired_at', 'last_request', 'request_ip', 'user_agent','device','platform','browser','robot', 'status','sesion_end_type','end_sesion_description'
     ];
 
-    protected $hidden = [
-       'password'
-    ];
-    
     /**
      * The attributes excluded from the model's JSON form.
      *

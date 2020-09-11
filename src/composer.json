@@ -7,6 +7,7 @@
     "require": {
         "php": "^7.2.5",
         "illuminate/mail": "^7.27",
+        "jenssegers/agent": "^2.6",
         "laravel/lumen-framework": "^7.0"
     },
     "require-dev": {
