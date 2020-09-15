@@ -23,14 +23,38 @@ class loginController extends Controller
 
     private function errorsSession($error)
     {
+       
+        $array["error_code"] = "";
+        $array["error_msg"] = "";
+
         switch($error)
         {
             case 0:
-                return "Wrong Credentials";
+                $array["error_code"] = "001";
+                $array["error_msg"] = "Wrong credentials";
+                break;
 
             case 1:
-                return "Session expired";
+                $array["error_code"] = "002";
+                $array["error_msg"] = "Session expired";
+                break;
+
+            case 2:
+                $array["error_code"] = "003";
+                $array["error_msg"] = "Session already open";
+                break;
+
+             case 3:
+                $array["error_code"] = "004";
+                $array["error_msg"] = "Session already another device";
+                break;
+
+            default:
+                $array["error_code"] = "000";
+                $array["error_msg"] = "Generic error";
         }
+
+        return $array;
 
     }
 
@@ -64,29 +88,90 @@ class loginController extends Controller
         return $token;
     }
 
-    private function checkSession($input,$login = false,$api_token="") //Retur 0 on wron credentials, return 1 on sesion expired, return user object 
+    private function ip_info($ip = NULL, $purpose = "location", $deep_detect = TRUE) {
+        $output = NULL;
+        if (filter_var($ip, FILTER_VALIDATE_IP) === FALSE) {
+            $ip = $_SERVER["REMOTE_ADDR"];
+            if ($deep_detect) {
+                if (filter_var(@$_SERVER['HTTP_X_FORWARDED_FOR'], FILTER_VALIDATE_IP))
+                    $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
+                if (filter_var(@$_SERVER['HTTP_CLIENT_IP'], FILTER_VALIDATE_IP))
+                    $ip = $_SERVER['HTTP_CLIENT_IP'];
+            }
+        }
+        $purpose    = str_replace(array("name", "\n", "\t", " ", "-", "_"), NULL, strtolower(trim($purpose)));
+        $support    = array("country", "countrycode", "state", "region", "city", "location", "address");
+        $continents = array(
+            "AF" => "Africa",
+            "AN" => "Antarctica",
+            "AS" => "Asia",
+            "EU" => "Europe",
+            "OC" => "Australia (Oceania)",
+            "NA" => "North America",
+            "SA" => "South America"
+        );
+        if (filter_var($ip, FILTER_VALIDATE_IP) && in_array($purpose, $support)) {
+            $ipdat = @json_decode(file_get_contents("http://www.geoplugin.net/json.gp?ip=" . $ip));
+            if (@strlen(trim($ipdat->geoplugin_countryCode)) == 2) {
+                switch ($purpose) {
+                    case "location":
+                        $output = array(
+                            "city"           => @$ipdat->geoplugin_city,
+                            "state"          => @$ipdat->geoplugin_regionName,
+                            "country"        => @$ipdat->geoplugin_countryName,
+                            "country_code"   => @$ipdat->geoplugin_countryCode,
+                            "continent"      => @$continents[strtoupper($ipdat->geoplugin_continentCode)],
+                            "continent_code" => @$ipdat->geoplugin_continentCode
+                        );
+                        break;
+                    case "address":
+                        $address = array($ipdat->geoplugin_countryName);
+                        if (@strlen($ipdat->geoplugin_regionName) >= 1)
+                            $address[] = $ipdat->geoplugin_regionName;
+                        if (@strlen($ipdat->geoplugin_city) >= 1)
+                            $address[] = $ipdat->geoplugin_city;
+                        $output = implode(", ", array_reverse($address));
+                        break;
+                    case "city":
+                        $output = @$ipdat->geoplugin_city;
+                        break;
+                    case "state":
+                        $output = @$ipdat->geoplugin_regionName;
+                        break;
+                    case "region":
+                        $output = @$ipdat->geoplugin_regionName;
+                        break;
+                    case "country":
+                        $output = @$ipdat->geoplugin_countryName;
+                        break;
+                    case "countrycode":
+                        $output = @$ipdat->geoplugin_countryCode;
+                        break;
+                }
+            }
+        }
+        return $output;
+    }
+
+    private function checkSession($request = false, $isLogin=false) //Retur 0 on wron credentials, return 1 on sesion expired, return user object 
     {
+
+        $api_token = $request->header('api_token');
+
+        $input = $request->all();
 
         $validator = \Validator::make($input, [
             'email' => 'required',
             'password' => 'required'
         ]);
 
-        if ($validator->fails()) {
+        if ( $validator->fails() ) { //NO SE ENCUENTRA LAS VARIABLES DE CREDENCIALES DE ACCESO
             return 0;
         }
         
-        $user = Users::where('email',$input["email"])->first();
+        $user = Users::where('email',$input["email"])->first(); //SE CONSULTA LA BD 
 
         if ( $user ){
-
-            if ( $api_token != "" )
-            {
-                if ( $api_token !=  $user->api_token ) //Valido el API TOKEN SEA DEL USUARIO QUE ME ESTA CONSULTANDO
-                {
-                    return 0;
-                }
-            }
 
             if (password_verify($input["password"], $user->password)  )
             {
@@ -95,35 +180,126 @@ class loginController extends Controller
                 return 0;
             }
 
-            if ( $login == false ) //SI ES PETICION SUBSECUENTE AL LOGIN
-            {
-                //DEBEMOS CONSULTAR QUE LA SESION ACTIVA,SEA IGUAL A LA PETICION ACTUAL
-                
-                $user = Users::where('email',$input["email"])->first();
-
-                if ( new \DateTime(date('Y-m-d H:i:s')) > new \DateTime($user->token_expiration) ) { //SESION EXPIRADA
+            //DEBEMOS CONSULTAR QUE LA SESION ACTIVA, SEA DEL MISMO DISPOSITIVO
+            $sessionGet = DB::table('user_sessions')->where( array('user_id' => $user->id,'status' => 1))->first();
                
-                   return 1;
+            //OBTENEMOS LOS DATOS DE LA SESION
+            $headersData = $this->getRequestData($request);
 
-                } else { //RENUEVO SESION
+            //echo $headersData["ip"];
+            //print_r( $this->ip_info($headersData["ip"]) );
 
-                    $dateTime = new \DateTime(date('Y-m-d H:i:s'));
-                    $dateTime = $dateTime->modify('+5 minutes');
-                    $dateTime = $dateTime->format("Y-m-d H:i:s");
+            //exit;
+            
+            if ( $isLogin == false ) //SI ES PETICION SUBSECUENTE AL LOGIN
+            {
 
-                    DB::table('users')->where('id', $user->id)->update(['token_expiration' => $dateTime ]); //Confirm Email, expire link
-                   
+                if ( $api_token != $user->api_token ) //VALIDA QUE EL API TOKEN SEA DEL USUARIO QUE ME ESTA CONSULTANDO
+                {
+                    return 0;
                 }
 
-            } else { //SI ES PARA LOGIN
+                if ( $sessionGet ){ //SE ENCONTRO UNA SESION SUPUESTAMENTE ABIERTA
 
+                    //SI ES DEL MISMO DISPOSITIVO VALIDO SI NO HA EXPIRADO
+                    if ( new \DateTime(date('Y-m-d H:i:s')) > new \DateTime($sessionGet->expired_at) ) { //SESION EXPIRADA
+
+                        DB::table('user_sessions')->where('id', $sessionGet->id)->update(['status' => 0]); //ESTABLECE LA SESION A EXPIRADA EN CASO NO ESTARLO
+                        return 1;
+                    }
+
+                    //VALIDAMOS SI ES DEL MISMO DISPOSITIVO
+                    if ( $sessionGet->user_agent == $headersData["userAgent"] && $sessionGet->device == $headersData["device"] &&  $sessionGet->platform == $headersData["platform"] &&  $sessionGet->browser == $headersData["browser"] &&  $sessionGet->robot == $headersData["robotName"] ){ // ES EL MISMO DISPOSIITO
+                    } else {
+                        return 3; //SESION ACTIVA EN OTRO DISPOSITIVO
+                    }
+
+                } else { //NO SE ENCONTRO SESION ACTIVA; QUIERE DECIR QUE YA VENCIÓ
+                    return 1;
+                }
+
+                //SI LAS CREDENCIALES SON CORRECTAS, TOKEN CORRECTO, RENUEVO SESION
+                $dateTime = new \DateTime(date('Y-m-d H:i:s'));
+                $dateTime = $dateTime->modify('+5 minutes');
+                $dateTime = $dateTime->format("Y-m-d H:i:s");
+
+                DB::table('user_sessions')->where('id', $sessionGet->id)->update(['expired_at' => $dateTime ]); //Confirm Email, expire link   
+
+            } else { //SI ES DE LOGIN, REVISAMOS SI EXISTE UNA SESIÓN EXISTENTE
+
+                if ( $sessionGet ){ //SE ENCONTRO UNA SESION SUPUESTAMENTE ABIERTA
+
+                    if ( new \DateTime(date('Y-m-d H:i:s')) > new \DateTime($sessionGet->expired_at) )
+                    { //SESION EXPIRADA, POR LO QUE NO REPRESENTA UNA SESION ACTIVA EN OTRO DISPOSITIVO
+
+                        DB::table('user_sessions')->where('id', $sessionGet->id)->update(['status' => 0]); //ESTABLECE LA SESION A EXPIRADA EN CASO NO ESTARLO
+
+                    } else { //LA SESION AÚN ESTA ABIERTA
+
+                        //REVISO QUE SEA DEL MISMO DISPOSITIVO
+                        if ( $sessionGet->user_agent == $headersData["userAgent"] && $sessionGet->device == $headersData["device"] &&  $sessionGet->platform == $headersData["platform"] &&  $sessionGet->browser == $headersData["browser"] &&  $sessionGet->robot == $headersData["robotName"] ){ 
+                            return 2;//SESION ACTIVA EN OTRO DISPOSITIVO
+                        
+                        } else {
+                            return 3; //SESION ACTIVA EN OTRO DISPOSITIVO
+                        
+                        }
+                    }
+                }
             }
 
             return $user;
 
         } else {
+
             return 0;
+
         }
+    }
+
+
+    private function getRequestData($request){
+
+        $agent = new Agent();
+
+        $ip = $request->getClientIps()[0];
+
+        $userAgent =  $request->header('User-Agent');
+
+        if ($agent->device()){
+            $device = $agent->device();
+        } else {
+            $device = "";
+        }
+
+        if ($agent->platform()){
+            $platform = $agent->platform().", version:".$agent->version($agent->platform());
+        } else {
+            $platform = "";
+        }
+
+        if ($agent->browser()){
+            $browser = $agent->browser().", version:".$agent->version($agent->browser());
+        } else {
+            $browser = "";
+        }
+
+        $isRobot = $agent->isRobot();
+        if ($isRobot){
+            $robotName = $agent->robot();  
+        } else {
+            $robotName = "";
+        }
+
+        $array["ip"] = $ip;
+        $array["userAgent"] = $userAgent;
+        $array["device"] = $device;
+        $array["platform"] = $platform;
+        $array["browser"] = $browser;
+        $array["robotName"] = $robotName;
+
+        return $array;
+
     }
 
 
@@ -361,10 +537,14 @@ class loginController extends Controller
         
         $input = $request->all();
 
-        $check = $this->checkSession($input,true);
+        $check = $this->checkSession($request,true);
         
-        if ( !is_object($check) ){ 
-            return response()->json(['status'=>'error','msg'=>$this->errorsSession($check)],422);
+        if ( !is_object($check) ){
+
+            $errors = $this->errorsSession($check);
+
+            return response()->json(['status'=>'error','error_code' => $errors["error_code"] ,'msg'=>$errors["error_msg"]],401);
+        
         } else {
 
             $data = $check;
@@ -373,8 +553,6 @@ class loginController extends Controller
             $dateTime = new \DateTime(date('Y-m-d H:i:s'));
             $dateTime = $dateTime->modify('+5 minutes');
             $dateTime = $dateTime->format("Y-m-d H:i:s");
-
-            //DB::table('users')->where('id', $check->id)->update(['token_expiration' => $dateTime  ]); //ACTUALIZAMOS TOKEN
 
             $this->setSesionData($request,$check); //CREO SESIÓN
 
@@ -428,10 +606,14 @@ class loginController extends Controller
     {
         $input = $request->all();
 
-        $check = $this->checkSession($input);
+        $check = $this->checkSession($request);
+        
+        if ( !is_object($check) ){
 
-        if ( !is_object($check) ){ 
-            return response()->json(['status'=>'error','msg'=>$this->errorsSession($check)],422);
+            $errors = $this->errorsSession($check);
+
+            return response()->json(['status'=>'error','error_code' => $errors["error_code"] ,'msg'=>$errors["error_msg"]],401);
+        
         } else {
 
             return response()->json(['status'=>'success','msg'=>'Good private access'],200);
@@ -441,11 +623,14 @@ class loginController extends Controller
     public function sendEmailConfirmation(Request $request)
     {
         $input = $request->all();
+ 
+        if ( !is_object($check) ){
 
-        $check = $this->checkSession($input);
-        if ( !is_object($check) ){ 
-            return response()->json(['status'=>'error','msg'=>$this->errorsSession($check)],422);
-       } else {
+            $errors = $this->errorsSession($check);
+
+            return response()->json(['status'=>'error','error_code' => $errors["error_code"] ,'msg'=>$errors["error_msg"]],401);
+        
+        } else {
             $data = $check;
             $array = $data['api_token'];
             $emailConfirmation = $this->getToken(30);
@@ -473,9 +658,14 @@ class loginController extends Controller
             return response()->json(['status'=>'error','msg'=>'Fields missing or wrong format'],422);
         }
 
-        $check = $this->checkSession($input);
-        if ( !is_object($check) ){ 
-            return response()->json(['status'=>'error','msg'=>$this->errorsSession($check)],422);
+        $check = $this->checkSession($request,false);
+       
+        if ( !is_object($check) ){
+
+            $errors = $this->errorsSession($check);
+
+            return response()->json(['status'=>'error','error_code' => $errors["error_code"] ,'msg'=>$errors["error_msg"]],401);
+        
         } else {
 
             if ($check->phone_confirmed == 1) {
@@ -508,9 +698,13 @@ class loginController extends Controller
             return response()->json(['status'=>'error','msg'=>'Fields missing or wrong format'],422);
         }
 
-        $check = $this->checkSession($input);
-        if ( !is_object($check) ){ 
-            return response()->json(['status'=>'error','msg'=>$this->errorsSession($check)],422);
+       
+        if ( !is_object($check) ){
+
+            $errors = $this->errorsSession($check);
+
+            return response()->json(['status'=>'error','error_code' => $errors["error_code"] ,'msg'=>$errors["error_msg"]],401);
+        
         } else {
 
             if ( $check->nip_confirmed == 1 )
@@ -539,9 +733,12 @@ class loginController extends Controller
             return response()->json(['status'=>'error','msg'=>'Fields missing or wrong format'],422);
         }
 
-        $check = $this->checkSession($input);
-        if ( !is_object($check) ){ 
-            return response()->json(['status'=>'error','msg'=>$this->errorsSession($check)],422);
+        if ( !is_object($check) ){
+
+            $errors = $this->errorsSession($check);
+
+            return response()->json(['status'=>'error','error_code' => $errors["error_code"] ,'msg'=>$errors["error_msg"]],401);
+        
         } else {
 
             if ( !password_verify($input["nip"], $check->nip) )
