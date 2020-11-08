@@ -5,6 +5,9 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Contracts\Auth\Factory as Auth;
 
+/* MODELOS */
+use App\Models\FailedUserSessions;
+
 class Authenticate
 {
     /**
@@ -36,7 +39,22 @@ class Authenticate
     public function handle($request, Closure $next, $guard = null)
     {
         if ($this->auth->guard($guard)->guest()) {
-            return response()->json(['status'=>'error','msg'=>'Unauthorized'],401);
+
+
+            $headersData = app('App\Http\Controllers\loginController')->getRequestData($request);
+            //REGISTRAMOS API TOKEN NO EXISTE
+            $newSession = new FailedUserSessions;
+            $newSession->email = '';
+            $newSession->started_at = date('Y-m-d');
+            $newSession->request_ip = ''.app('App\Http\Controllers\loginController')->getIp();
+            $newSession->user_agent = $headersData["userAgent"];
+            $newSession->device =  $headersData["device"];
+            $newSession->platform = $headersData["platform"];
+            $newSession->browser =  $headersData["browser"];
+            $newSession->type =  4;
+            $newSession->save();
+
+            return response()->json(['status'=>'error', 'error_code' => "000", 'msg'=>'No autorizado'],401);
         }
 
         return $next($request);

@@ -1,10 +1,10 @@
 version: "3.7"
 services:
-  nginx:
+  nginxapiclase:
     image: nginx
-    container_name: nginx
+    container_name: nginxapiclase
     ports:
-      - "82:80"
+      - "86:80"
     volumes:
       - ./configs:/etc/nginx/conf.d
       - ./src:/src
@@ -12,23 +12,23 @@ services:
     networks:
       default:
         aliases:
-          - nginx
+          - nginxapiclase
     command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
     
-  php:
+  phpapiclase:
     build:
       context: .
       dockerfile: dockerfile
-    container_name: php
+    container_name: phpapiclase
     volumes:
       - ./src:/src
     working_dir: /src
     ports:
-      - 8000:8000
+      - 8006:8000
     networks:
       default:
          aliases:
-          - php
+          - phpapiclase
   
 networks:
   default:

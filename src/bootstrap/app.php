@@ -70,6 +70,8 @@ $app->alias('mailer', Illuminate\Contracts\Mail\Mailer::class);
 $app->alias('mailer', Illuminate\Contracts\Mail\MailQueue::class);
 $app->alias('Agent', Jenssegers\Agent\Facades\Agent::class);
 
+$app->configure('constants');
+
 /*
 |--------------------------------------------------------------------------
 | Register Middleware

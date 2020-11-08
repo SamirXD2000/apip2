@@ -15,6 +15,8 @@
 	* Nginx
 	* Lumen
 
-### Developed by ###
+### IMPORTANTE ###
+En el dashboard de Docker ir a Settins->Resources->File Sharing y adicionar la carpeta donde se encuentra el repositorio, de lo contrario generá un error.
 
+### Developed by ###
 * Arces.mx Dev team
